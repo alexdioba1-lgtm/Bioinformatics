@@ -1,0 +1,57 @@
+import matplotlib.pyplot as plt
+
+def read_fasta(filename):
+    """Read DNA sequence from a FASTA file (ignores headers)."""
+    with open(filename, 'r') as file:
+        lines = file.readlines()
+    sequence = ''.join([line.strip() for line in lines if not line.startswith('>')])
+    return sequence.upper()
+
+
+def calculate_tm_simple(dna_sequence):
+    """Calculate Tm using the simple formula: Tm = 4(G + C) + 2(A + T)."""
+    A = dna_sequence.count('A')
+    T = dna_sequence.count('T')
+    G = dna_sequence.count('G')
+    C = dna_sequence.count('C')
+    tm = 4 * (G + C) + 2 * (A + T)
+    return tm
+
+
+def sliding_window_tm(sequence, window_size=9, step=1):
+    """Compute Tm for each window of the sequence."""
+    tm_values = []
+    positions = []
+    for i in range(0, len(sequence) - window_size + 1, step):
+        window = sequence[i:i + window_size]
+        tm = calculate_tm_simple(window)
+        tm_values.append(tm)
+        positions.append(i + 1)  # position of window start
+    return positions, tm_values
+
+
+def plot_tm(positions, tm_values, sequence_length):
+    """Plot Tm vector vs. sequence length."""
+    plt.figure(figsize=(10, 5))
+    plt.plot(positions, tm_values, label="Melting Temperature (Tm)", linewidth=2)
+    plt.title("Sliding Window Melting Temperature Profile (Window=9)")
+    plt.xlabel("Sequence Position (bp)")
+    plt.ylabel("Melting Temperature (°C)")
+    plt.grid(True)
+    plt.xlim(0, sequence_length)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+
+
+if __name__ == "__main__":
+    fasta_file = input("Enter the path of your FASTA file: ").strip()
+    sequence = read_fasta(fasta_file)
+    
+    positions, tm_values = sliding_window_tm(sequence, window_size=9, step=1)
+    
+    print(f"Sequence length: {len(sequence)} bases")
+    print(f"Number of Tm values computed: {len(tm_values)}")
+    
+    plot_tm(positions, tm_values, len(sequence))
