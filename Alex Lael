@@ -1,0 +1,32 @@
+def calculate_tm_simple(dna_sequence):
+    dna = dna_sequence.upper()
+    g = dna.count('G')
+    c = dna.count('C')
+    a = dna.count('A')
+    t = dna.count('T')
+    tm = 4 * (g + c) + 2 * (a + t)
+    return tm
+
+
+def calculate_tm_advanced(dna_sequence, na_concentration=0.001):
+    """
+    import math
+    dna = dna_sequence.upper()
+    g = dna.count('G')
+    c = dna.count('C')
+    length = len(dna)
+    gc_content = ((g + c) / length) * 100
+    tm = 81.5 + 16.6 * math.log10(na_concentration) + 0.41 * gc_content - (600 / length)
+    return tm
+
+
+if __name__ == "__main__":
+    dna_input = input("Enter a DNA sequence (e.g., ATGCGTAC): ").strip().upper()
+
+    if not dna_input or any(base not in "ATGC" for base in dna_input):
+        print("Invalid DNA sequence. Please use only A, T, G, and C.")
+    else:
+        tm1 = calculate_tm_simple(dna_input)
+        tm2 = calculate_tm_advanced(dna_input)
+        print(f"\nSimple formula Tm: {tm1:.2f} °C")
+        print(f"Advanced formula Tm: {tm2:.2f} °C")
