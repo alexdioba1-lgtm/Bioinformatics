@@ -1,0 +1,22 @@
+import matplotlib.pyplot as plt
+
+def tm(seq): return 4*(seq.count('G')+seq.count('C')) + 2*(seq.count('A')+seq.count('T'))
+
+def read_fasta(path):
+    return ''.join(l.strip() for l in open(path) if not l.startswith('>')).upper()
+
+def sliding_tm(seq, w=9):
+    return [tm(seq[i:i+w]) for i in range(len(seq)-w+1)]
+
+# --- Main ---
+fasta = input("FASTA file path: ").strip()
+seq = read_fasta(fasta)
+Tms = sliding_tm(seq)
+th = sum(Tms)/len(Tms)  # mean threshold
+
+plt.plot(Tms, label="Tm (°C)")
+plt.axhline(th, color='r', ls='--', label=f"Threshold = {th:.1f}°C")
+plt.title("Melting Temperature (Tm) Profile - Window 9")
+plt.xlabel("Position (bp)")
+plt.ylabel("Tm (°C)")
+plt.legend(); plt.grid(); plt.show()
