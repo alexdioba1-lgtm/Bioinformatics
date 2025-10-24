@@ -1,0 +1,174 @@
+project L5
+
+codon_compare_ncbi.py
+
+Downloads:
+ - SARS-CoV-2 reference (NC_045512.2)
+ - Influenza A (A/Puerto Rico/8/1934) RefSeq segments (NC_002016 .. NC_002023)
+Computes codon frequencies (frame 1 / starting at nt 0), produces plots, and prints top amino acids.
+
+Requires:
+  pip install biopython matplotlib pandas
+
+Usage:
+  python codon_compare_ncbi.py
+"""
+
+from collections import Counter, defaultdict
+from Bio import Entrez, SeqIO
+import math
+import matplotlib.pyplot as plt
+import pandas as pd
+
+# --- User: set your email here (NCBI asks for an email string) ---
+Entrez.email = "your.email@example.com"
+
+# Accessions
+sars_acc = "NC_045512.2"
+# Influenza A (A/Puerto Rico/8/1934) RefSeq accessions for 8 segments (commonly NC_002016 .. NC_002023)
+influenza_acc_list = ["NC_002016","NC_002017","NC_002018","NC_002019","NC_002020","NC_002021","NC_002022","NC_002023"]
+
+def fetch_fasta(accessions):
+    """Fetch FASTA for one or more accessions (list or single). Returns concatenated sequence string (upper)."""
+    if isinstance(accessions, str):
+        accessions = [accessions]
+    handle = Entrez.efetch(db="nuccore", id=",".join(accessions), rettype="fasta", retmode="text")
+    records = list(SeqIO.parse(handle, "fasta"))
+    handle.close()
+    seqs = [str(r.seq).upper().replace("\n","").replace("\r","") for r in records]
+    return seqs, records
+
+def concat_seqs(seqs):
+    return "".join(seqs)
+
+# Genetic code (standard) codon->AA
+genetic_code = {
+ 'TTT':'F','TTC':'F','TTA':'L','TTG':'L','CTT':'L','CTC':'L','CTA':'L','CTG':'L',
+ 'ATT':'I','ATC':'I','ATA':'I','ATG':'M','GTT':'V','GTC':'V','GTA':'V','GTG':'V',
+ 'TCT':'S','TCC':'S','TCA':'S','TCG':'S','CCT':'P','CCC':'P','CCA':'P','CCG':'P',
+ 'ACT':'T','ACC':'T','ACA':'T','ACG':'T','GCT':'A','GCC':'A','GCA':'A','GCG':'A',
+ 'TAT':'Y','TAC':'Y','TAA':'*','TAG':'*','CAT':'H','CAC':'H','CAA':'Q','CAG':'Q',
+ 'AAT':'N','AAC':'N','AAA':'K','AAG':'K','GAT':'D','GAC':'D','GAA':'E','GAG':'E',
+ 'TGT':'C','TGC':'C','TGA':'*','TGG':'W','CGT':'R','CGC':'R','CGA':'R','CGG':'R',
+ 'AGT':'S','AGC':'S','AGA':'R','AGG':'R','GGT':'G','GGC':'G','GGA':'G','GGG':'G'
+}
+
+def codon_counts(seq):
+    """Count codons in frame 0, ignoring incomplete trailing bases and any codons with non-ACGT letters."""
+    n = (len(seq) // 3) * 3
+    counts = Counter()
+    for i in range(0, n, 3):
+        cod = seq[i:i+3]
+        if set(cod).issubset({'A','C','G','T'}):
+            counts[cod] += 1
+    return counts
+
+def top_n_from_counts(counts, n=10):
+    return counts.most_common(n)
+
+def codon_to_aa_stats(codon_counts):
+    """Return amino acid counts aggregated from codons (AA -> total count) and mapping AA->codon->count."""
+    aa_counts = Counter()
+    aa_to_codons = defaultdict(Counter)
+    for cod, c in codon_counts.items():
+        aa = genetic_code.get(cod, 'X')
+        aa_counts[aa] += c
+        aa_to_codons[aa][cod] = c
+    return aa_counts, aa_to_codons
+
+def plot_top_codons(df, title, filename=None):
+    """df should have columns: 'codon','count' (ordered descending)."""
+    plt.figure(figsize=(10,5))
+    plt.bar(df['codon'], df['count'])
+    plt.xlabel('Codon')
+    plt.ylabel('Count')
+    plt.title(title)
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    if filename:
+        plt.savefig(filename, dpi=200)
+    plt.show()
+
+def combined_bar_chart(df1, df2, title, filename=None):
+    """Compare codon counts between two dataframes (codon,count). We'll show top codons union and two bars side-by-side."""
+    # union top codons
+    codons = sorted(list(set(df1['codon']).union(set(df2['codon']))))
+    counts1 = [int(df1.set_index('codon').get('count', pd.Series({})).get(c,0)) for c in codons]
+    counts2 = [int(df2.set_index('codon').get('count', pd.Series({})).get(c,0)) for c in codons]
+    x = range(len(codons))
+    width = 0.4
+    plt.figure(figsize=(max(8, len(codons)*0.5),5))
+    plt.bar([i-width/2 for i in x], counts1, width=width, label='SARS-CoV-2')
+    plt.bar([i+width/2 for i in x], counts2, width=width, label='Influenza')
+    plt.xticks(x, codons, rotation=90)
+    plt.legend()
+    plt.title(title)
+    plt.tight_layout()
+    if filename:
+        plt.savefig(filename, dpi=200)
+    plt.show()
+
+def main():
+    print("Fetching SARS-CoV-2 reference ({}).".format(sars_acc))
+    s_seqs, s_records = fetch_fasta(sars_acc)
+    s_seq = concat_seqs(s_seqs)
+    print("SARS-CoV-2 length:", len(s_seq))
+
+    print("Fetching Influenza A segments ({}).".format(", ".join(influenza_acc_list)))
+    i_seqs, i_records = fetch_fasta(influenza_acc_list)
+    i_seq = concat_seqs(i_seqs)
+    print("Influenza (concatenated) total length:", len(i_seq))
+
+    # Codon counts
+    s_codon_counts = codon_counts(s_seq)
+    i_codon_counts = codon_counts(i_seq)
+
+    s_top10 = top_n_from_counts(s_codon_counts, 10)
+    i_top10 = top_n_from_counts(i_codon_counts, 10)
+
+    df_s = pd.DataFrame(s_top10, columns=['codon','count'])
+    df_i = pd.DataFrame(i_top10, columns=['codon','count'])
+
+    print("\nTop 10 codons - SARS-CoV-2")
+    print(df_s.to_string(index=False))
+    print("\nTop 10 codons - Influenza (concatenated)")
+    print(df_i.to_string(index=False))
+
+    # Plotting
+    plot_top_codons(df_s, "Top 10 codons — SARS-CoV-2 (NC_045512.2)", filename="sars_top10_codons.png")
+    plot_top_codons(df_i, "Top 10 codons — Influenza A (A/Puerto Rico/8/1934 concatenated)", filename="influenza_top10_codons.png")
+
+    # Combined: take union of top 10s
+    combined_codons = list(dict.fromkeys([c for c,_ in s_top10] + [c for c,_ in i_top10]))  # preserve order: sars then influenza
+    df_s_all = pd.DataFrame([(c, s_codon_counts.get(c,0)) for c in combined_codons], columns=['codon','count'])
+    df_i_all = pd.DataFrame([(c, i_codon_counts.get(c,0)) for c in combined_codons], columns=['codon','count'])
+    combined_bar_chart(df_s_all, df_i_all, "Comparison: top codons between SARS-CoV-2 and Influenza", filename="combined_top_codons.png")
+
+    # Amino acid stats
+    s_aa_counts, s_aa_to_codons = codon_to_aa_stats(s_codon_counts)
+    i_aa_counts, i_aa_to_codons = codon_to_aa_stats(i_codon_counts)
+
+    print("\nTop 3 amino acids - SARS-CoV-2 (AA : count)")
+    for aa, cnt in s_aa_counts.most_common(3):
+        print(f"{aa} : {cnt}")
+        # top codons for this AA
+        top_codons_for_aa = s_aa_to_codons[aa].most_common(3)
+        print("  top codons:", top_codons_for_aa)
+
+    print("\nTop 3 amino acids - Influenza (concatenated) (AA : count)")
+    for aa, cnt in i_aa_counts.most_common(3):
+        print(f"{aa} : {cnt}")
+        top_codons_for_aa = i_aa_to_codons[aa].most_common(3)
+        print("  top codons:", top_codons_for_aa)
+
+    # Save simple CSVs
+    df_s_total = pd.DataFrame(sorted(s_codon_counts.items(), key=lambda x:-x[1]), columns=['codon','count'])
+    df_i_total = pd.DataFrame(sorted(i_codon_counts.items(), key=lambda x:-x[1]), columns=['codon','count'])
+    df_s_total.to_csv("sars_codon_counts.csv", index=False)
+    df_i_total.to_csv("influenza_codon_counts.csv", index=False)
+    print("\nSaved CSVs: sars_codon_counts.csv, influenza_codon_counts.csv")
+    print("Saved PNGs: sars_top10_codons.png, influenza_top10_codons.png, combined_top_codons.png")
+    print("\nDone.")
+
+if __name__ == "__main__":
+    main()
